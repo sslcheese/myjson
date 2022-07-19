@@ -35,7 +35,8 @@ class Keyvalue:
         self.val: JSON = val
 
     def __str__(self):
-        return '"' + self.key + '": ' + str(self.val)
+        res = "".join(('"', self.key, '": ', str(self.val)))
+        return res
 
 
 class Obj:
@@ -46,9 +47,7 @@ class Obj:
     def __str__(self):
         res = "{"
         for kv in self.kvs:
-            res += '"' + str(kv.key) + '"'
-            res += ": "
-            res += str(kv.val)
+            res = "".join((res, str(kv)))
             res += ","
         res = res.rstrip(",")
         res += "}"
@@ -66,7 +65,7 @@ class Value:
         elif self.j_type == JsonE.JSON_BOL:
             res = str(self.bol)
         elif self.j_type == JsonE.JSON_STR:
-            res = self.str
+            res = '"' + self.str + '"'
         elif self.j_type == JsonE.JSON_ARR:
             res = str(self.arr)
         elif self.j_type == JsonE.JSON_OBJ:
@@ -110,17 +109,9 @@ class JSON:
     def arr(self):
         return self.val.arr
 
-    @arr.setter
-    def arr(self, val):
-        self.val.arr = val
-
     @property
     def obj(self):
         return self.val.obj
-
-    @obj.setter
-    def obj(self, val):
-        self.val.obj = val
 
 
 def json_new(j_type: JsonE) -> JSON:
@@ -192,7 +183,7 @@ def json_write(j: JSON, level: int, f):
 def json_save(json: JSON, fname: str) -> int:
     with open(fname, "w+", newline="") as f:
         json_write(json, 0, f)
-    return 0
+    return 1
 
 
 def json_num(json: JSON, default: float=0.0) -> float:
@@ -271,13 +262,23 @@ def json_get_member(json: JSON, key: str) -> JSON:
 def json_get_element(json: JSON, idx: int) -> JSON:
     if not (json and json.j_type == JsonE.JSON_ARR):
         raise TypeError
-    if not (json.arr.count > 0 and json.arr.elems is None):
+    if json.arr.count > 0 and json.arr.elems is None:
         raise ValueError
 
     if isinstance(idx, int) and json.arr.count > idx >= 0:
         return json.arr.elems[idx]
     else:
         raise ValueError("idx不合法")
+
+
+def is_key_legal(key: str):
+    # 正则检查key是否合法
+    try:
+        k = re.findall("[a-zA-Z][a-zA-Z0-9_]*", key)[0]
+        if key == k:
+            return True
+    except IndexError as e:
+        return False
 
 
 def json_add_member(json: JSON, key: str, val: JSON) -> JSON:
@@ -297,13 +298,19 @@ def json_add_member(json: JSON, key: str, val: JSON) -> JSON:
  *  2) 当json_add_member内部发生失败时，需要释放val，满足将val的所有权转让给json_add_member的语义设定
  */
     '''
-    assert json.j_type == JsonE.JSON_OBJ
-    assert not (json.obj.count > 0 and json.obj.kvs is None)
-    assert key
+    if not json:
+        raise ValueError
+    if json.j_type is not JsonE.JSON_OBJ:
+        raise TypeError("json类型错误")
+    if not isinstance(val, JSON):
+        raise TypeError("val类型错误")
+    if json.obj.count > 0 and json.obj.kvs is None:
+        raise ValueError
+
     # 想想: 为啥不用assert检查val？
     # 想想：如果json中已经存在名字为key的成员，怎么办？
     # 正则检查key是否合法
-    if not key == re.findall("[a-zA-Z][a-zA-Z0-9_]*", key)[0]:
+    if not is_key_legal(key):
         return None
 
     for kv in json.obj.kvs:
@@ -328,9 +335,11 @@ def json_add_element(json: JSON, val: JSON) -> JSON:
  *  json_add_element会转移val的所有权，所以调用json_add_element之后不用考虑释放val的问题
  */
     '''
-    assert json
-    assert json.j_type == JsonE.JSON_ARR
-    assert not (json.arr.count > 0 and json.arr.elems is None)
+    if not (json and json.j_type == JsonE.JSON_ARR):
+        raise ValueError
+
+    if json.arr.count > 0 and json.arr.elems is None:
+        raise ValueError
 
     json.arr.elems.append(val)
     json.arr.count += 1
@@ -402,76 +411,34 @@ def json_obj_get_str(json: JSON, key: str, default: str="") -> str:
     return child.str
 
 
-def is_key_legal(key: str):
-    # 正则检查key是否合法
-    if not key == re.findall("[a-zA-Z][a-zA-Z0-9_]*", key)[0]:
-        raise UserWarning("Key命名不合法")
-        return False
-    return True
-
-
 def json_obj_set_num(json: JSON, key: str, val: float) -> int:
-    if not json:
-        raise ValueError
-    if json.j_type is not JsonE.JSON_OBJ:
-        raise TypeError("json类型错误")
-    if not (isinstance(val, float) or isinstance(val, int)):
-        raise TypeError("val类型错误")
-
-    if not is_key_legal(key):
-        return -1
-    value = Value(JsonE.JSON_NUM)
-    value.num = val
-    for kv in json.obj.kvs:
-        if kv.key == key:
-            kv.value = value
-            return 0
-
-    kv = Keyvalue(key, value)
-    json.obj.kvs.append(kv)
-    return 0
+    if isinstance(val, int) or isinstance(val, float):
+        new_json = json_new(JsonE.JSON_NUM)
+        new_json.val = json_new_num(val)
+        json_add_member(json, key, new_json)
+        return val
+    else:
+        return None
 
 
-def json_obj_set_bool(json: JSON, key: str, val: bool) -> int:
-    if not json:
-        raise ValueError
-    if json.j_type is not JsonE.JSON_OBJ:
-        raise TypeError("json类型错误")
-    if not isinstance(val, bool):
-        raise TypeError("val类型错误")
-
-    if not is_key_legal(key):
-        return -1
-    value = Value(JsonE.JSON_BOL)
-    value.bol = val
-    for kv in json.obj.kvs:
-        if kv.key == key:
-            kv.value = val
-            return 0
-    kv = Keyvalue(key, value)
-    json.obj.kvs.append(kv)
-    return 0
+def json_obj_set_bool(json: JSON, key: str, val: bool) -> bool:
+    if isinstance(val, bool):
+        new_json = json_new(JsonE.JSON_BOL)
+        new_json.val = json_new_bool(val)
+        json_add_member(json, key, new_json)
+        return val
+    else:
+        return None
 
 
-def json_obj_set_str(json: JSON, key: str, val: str) -> int:
-    if not json:
-        raise ValueError
-    if json.j_type is not JsonE.JSON_OBJ:
-        raise TypeError("json类型错误")
-    if not isinstance(val, str):
-        raise TypeError("val类型错误")
-
-    if not is_key_legal(key):
-        return -1
-    value = Value(JsonE.JSON_STR)
-    value.str = val
-    for kv in json.obj.kvs:
-        if kv.key == key:
-            kv.value = val
-            return 0
-    kv = Keyvalue(key, value)
-    json.obj.kvs.append(kv)
-    return 0
+def json_obj_set_str(json: JSON, key: str, val: str) -> str:
+    if isinstance(val, str):
+        new_json = json_new(JsonE.JSON_STR)
+        new_json.val = json_new_str(val)
+        json_add_member(json, key, new_json)
+        return val
+    else:
+        return None
 
 
 def json_arr_count(json: JSON) -> int:
@@ -502,85 +469,29 @@ def json_arr_get_str(json: JSON, idx: int, default: str="") -> str:
 
 
 def json_arr_add_num(json: JSON, val: float) -> int:
-    if not json or json.j_type is not JsonE.JSON_ARR:
-        raise ValueError
-    if json.arr.count <= 0:
-        raise ValueError
-
-    if isinstance(val, int) or isinstance(val, float):
-        value = Value(JsonE.JSON_NUM)
-        value.num = val
-        new_json = JSON()
-        new_json.j_type = JsonE.JSON_NUM
-        new_json.val = value
-        json.arr.elems.append(new_json)
-        json.arr.count += 1
-        return 0
-    return -1
+    if isinstance(val, float) or isinstance(val, int):
+        new_json = json_new(JsonE.JSON_NUM)
+        new_json.val = json_new_num(val)
+        json_add_element(json, new_json)
+        return val
+    return None
 
 
 def json_arr_add_bool(json: JSON, val: bool) -> int:
-    if not json or json.j_type is not JsonE.JSON_ARR:
-        raise ValueError
-    if json.arr.count <= 0:
-        raise ValueError
-
     if isinstance(val, bool):
-        value = Value(JsonE.JSON_BOL)
-        value.bol = val
-        new_json = JSON()
-        new_json.j_type = JsonE.JSON_BOL
-        new_json.val = value
-        json.arr.elems.append(new_json)
-        json.arr.count += 1
-        return 0
-    return -1
+        new_json = json_new(JsonE.JSON_BOL)
+        new_json.val = json_new_bool(val)
+        json_add_element(json, new_json)
+        return val
+    return None
 
 
 def json_arr_add_str(json: JSON, val: str) -> int:
-    if not json or json.j_type is not JsonE.JSON_ARR:
-        raise ValueError
-    if json.arr.count <= 0:
-        raise ValueError
 
     if isinstance(val, str):
-        value = Value(JsonE.JSON_STR)
-        value.bol = val
-        new_json = JSON()
-        new_json.j_type = JsonE.JSON_STR
-        new_json.val = value
-        json.arr.elems.append(new_json)
-        json.arr.count += 1
-        return 0
-    return -1
+        new_json = json_new(JsonE.JSON_STR)
+        new_json.val = json_new_str(val)
+        json_add_element(json, new_json)
+        return val
+    return None
 
-
-if __name__ == '__main__':
-
-    def main():
-        json = json_new(JsonE.JSON_OBJ)
-        basic = json_new(JsonE.JSON_OBJ)
-        dns = json_new(JsonE.JSON_ARR)
-        if not json or not basic or not dns:
-            json_free(json)
-            json_free(basic)
-            json_free(dns)
-            return -1
-        json_add_member(json, "basic", basic)
-        json_add_member(json, "dns", dns)
-        json_add_element(dns, json_new_str("200.200.2.254"))
-        json_add_element(dns, json_new_str("192.168.1.1"))
-        json_add_member(basic, "enable", json_new_bool(True))
-        print(json)
-        json_free(json)
-        basic = json_get_member(json, "basic")  # basic对应的对象
-        dns = json_get_member(json, "dns")  # dns对应的数组：["200.200.0.1","200.0.0.254"]
-        ip0 = json_get_element(dns, 0)  # 数组中第0个IP地址："200.200.0.1"
-        ip1 = json_get_element(dns, 1)  # 数组中第1个IP地址："200.0.0.254"
-        print("basic", basic.val)
-        print("dns", dns.val)
-        print("ip0", ip0.val)
-        print("ip1", ip1.val)
-
-
-    main()
