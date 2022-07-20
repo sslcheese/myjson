@@ -474,7 +474,8 @@ def json_arr_add_num(json: JSON, val: float) -> int:
         new_json.val = json_new_num(val)
         json_add_element(json, new_json)
         return val
-    return None
+    else:
+        raise TypeError
 
 
 def json_arr_add_bool(json: JSON, val: bool) -> int:
@@ -483,15 +484,31 @@ def json_arr_add_bool(json: JSON, val: bool) -> int:
         new_json.val = json_new_bool(val)
         json_add_element(json, new_json)
         return val
-    return None
+    else:
+        raise TypeError
 
 
 def json_arr_add_str(json: JSON, val: str) -> int:
-
     if isinstance(val, str):
         new_json = json_new(JsonE.JSON_STR)
         new_json.val = json_new_str(val)
         json_add_element(json, new_json)
         return val
-    return None
+    else:
+        raise TypeError
 
+
+def json_arr_pop(json: JSON, idx: int) -> JSON:
+    json_get_element(json, idx)
+    return json.arr.elems.pop(idx)
+
+
+def json_obj_pop(json: JSON, key: str) -> JSON:
+    json_get_member(json, key)
+    i = 0
+    for kv in json.obj.kvs:
+        if kv.key == key:
+            break
+        i += 1
+    kv = json.obj.kvs.pop(i)
+    return kv.val

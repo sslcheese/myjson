@@ -17,7 +17,7 @@ from myjson.json import json_obj_set_bool, json_obj_set_num, json_obj_set_str
 from myjson.json import json_arr_count
 from myjson.json import json_arr_get_num, json_arr_get_bol, json_arr_get_str
 from myjson.json import json_arr_add_bool, json_arr_add_num, json_arr_add_str
-
+from myjson.json import json_arr_pop, json_obj_pop
 
 class TestMyJsonMethods(unittest.TestCase):
     # 完成使用场景的测试
@@ -282,7 +282,23 @@ class TestMyJsonMethods(unittest.TestCase):
             json_add_element(test_arr, json_new_num(1))
         assert exc_info.type is ValueError
 
+    def test_json_arr_pop(self):
+        json = json_new(JsonE.JSON_ARR)
+        json_arr_add_str(json, "1")
+        json_arr_add_str(json, "2")
+        json_arr_add_str(json, "3")
+        json_arr_pop(json, 1)
+        assert str(json) == '["1","3"]'
 
+    def test_json_obj_pop(self):
+        json = json_new(JsonE.JSON_OBJ)
+        json_obj_set_bool(json, "isMale", True)
+        json_obj_set_num(json, "age", 50)
+        json_obj_set_str(json, "name", "小明")
+
+        name = json_obj_pop(json, "name")
+        assert json_str(name) == "小明"
+        assert str(json) == '{"isMale": True,"age": 50}'
 
 
 if __name__ == '__main__':
